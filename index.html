@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>救救龟龟</title>
     <style>
-        /* 背景色回归天蓝色 */
+        /* 天空蓝背景 */
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Arial', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
         
         #ui-container { position: absolute; top: 10px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 10; }
@@ -27,13 +27,15 @@
             100% { opacity: 0; transform: translate(-50%, -200%) scale(1); }
         }
         
-        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.85); color: white; padding: 30px; border-radius: 20px; text-align: center; z-index: 100; min-width: 280px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        /* 弹窗层级极高，且允许点击 */
+        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.85); color: white; padding: 30px; border-radius: 20px; text-align: center; z-index: 9999; min-width: 280px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: auto; }
         @keyframes popIn { from {transform: translate(-50%, -50%) scale(0.5); opacity: 0;} to {transform: translate(-50%, -50%) scale(1); opacity: 1;} }
         
         #game-over h1 { margin: 0 0 15px 0; color: #ff6b6b; font-size: 28px; }
         #game-win h1 { margin: 0 0 15px 0; color: #FFD700; font-size: 32px; text-shadow: 0 0 15px orange; }
         
-        button { padding: 12px 30px; font-size: 20px; cursor: pointer; background: linear-gradient(to bottom, #4CAF50, #2E7D32); border: none; color: white; border-radius: 50px; pointer-events: all; font-weight: bold; box-shadow: 0 5px 0 #1B5E20; margin-top: 20px; outline: none; -webkit-tap-highlight-color: transparent;}
+        /* 按钮样式优化，增加点击区域 */
+        button { padding: 15px 40px; font-size: 22px; cursor: pointer; background: linear-gradient(to bottom, #4CAF50, #2E7D32); border: none; color: white; border-radius: 50px; pointer-events: auto; font-weight: bold; box-shadow: 0 5px 0 #1B5E20; margin-top: 20px; outline: none; -webkit-tap-highlight-color: transparent; position: relative; z-index: 10000;}
         button:active { transform: translateY(4px); box-shadow: 0 1px 0 #1B5E20; }
         button.restart-btn { background: linear-gradient(to bottom, #2196F3, #1565C0); box-shadow: 0 5px 0 #0D47A1; } 
 
@@ -47,7 +49,7 @@
 <div id="ui-container">
     <div id="score-container"><span id="score">0</span></div>
     <div id="progress-wrapper"><div id="progress-bar"></div></div>
-    <div id="sub-text">清理进度</div>
+    <div id="sub-text">CLEANING PROGRESS</div>
 </div>
 
 <div id="tutorial-hint">↔ 旋转 | 🔍 滚轮/双指缩放 | 👆 点击拔除</div>
@@ -130,14 +132,12 @@
 
     function init() {
         scene = new THREE.Scene();
-        // 背景色：天空蓝
         scene.background = new THREE.Color(0x87CEEB); 
         scene.fog = new THREE.Fog(0x87CEEB, 40, 140);
 
         camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 0, currentZoomDist); 
         camera.lookAt(0, 0, 0);
-
         scene.add(camera);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -184,7 +184,6 @@
     function createMainTurtle() {
         mainGroup = new THREE.Group();
         
-        // 深色海龟，配合亮色背景
         const shellColor = 0x2F353B; 
         const skinColor = 0x4E423E;  
         const bellyColor = 0x8D8680; 
@@ -331,28 +330,22 @@
     function createTrayVisuals() {
         trayGroup = new THREE.Group();
 
-        // 槽位底板
-        // 宽度稍微宽一点，确保能容纳缩放后的物品
-        const width = TRAY_SLOTS * 3.5 + 1;
-        const trayBgGeo = new THREE.BoxGeometry(width, 1.4, 1); 
+        const trayBgGeo = new THREE.BoxGeometry(TRAY_SLOTS * 3.6, 1.2, 1); 
         const trayBgMat = new THREE.MeshBasicMaterial({ 
             color: 0x000000, 
             transparent: true, 
-            opacity: 0.5, // 稍微调淡一点
-            depthTest: false, // 永远在最上层
+            opacity: 0.5, 
+            depthTest: false,
             depthWrite: false
         });
         const trayBg = new THREE.Mesh(trayBgGeo, trayBgMat);
         trayBg.renderOrder = 999;
         trayGroup.add(trayBg);
 
-        // 移除了所有的 LineSegments (白色框线)
-
         const startX = -(TRAY_SLOTS - 1) * 3.5 / 2;
         const slotGeo = new THREE.BoxGeometry(3, 1, 0.5);
         
         for (let i = 0; i < TRAY_SLOTS; i++) {
-            // 不可见的占位符，用于定位
             const slot = new THREE.Mesh(slotGeo, new THREE.MeshBasicMaterial({ visible: false }));
             slot.position.set(startX + i * 3.5, 0, 0.2); 
             trayGroup.add(slot);
@@ -360,7 +353,6 @@
         }
         
         camera.add(trayGroup);
-        // 位置在 onWindowResize 里会更新
         trayGroup.position.set(0, -10, -20); 
     }
 
@@ -398,8 +390,15 @@
         if (!hasMoved) handleRaycast(event.clientX, event.clientY);
     }
 
+    // --- 关键修复：触摸事件过滤 ---
     function onTouchStart(event) {
+        // 如果点击的是按钮（或按钮内部），则不拦截，允许浏览器执行默认点击操作
+        if (event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+            return; 
+        }
+
         event.preventDefault(); 
+        
         if(event.touches.length === 1) {
             isDragging = true;
             hasMoved = false;
@@ -415,7 +414,12 @@
     }
 
     function onTouchMove(event) {
+        // 如果是在按钮上滑动，也不拦截
+        if (event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+            return;
+        }
         event.preventDefault();
+        
         if(event.touches.length === 1 && isDragging) {
             const touch = event.touches[0];
             const deltaX = touch.clientX - previousMousePosition.x;
@@ -446,6 +450,9 @@
     }
 
     function onTouchEnd(event) {
+        if (event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+            return;
+        }
         isDragging = false;
         if (!hasMoved && event.changedTouches.length > 0 && event.touches.length === 0) {
             const touch = event.changedTouches[0];
@@ -662,7 +669,6 @@
         document.getElementById('game-win').style.display = 'block';
     }
 
-    // --- 核心修改：手机端缩放适配逻辑 ---
     function onWindowResize() {
         const width = window.innerWidth;
         const height = window.innerHeight;
@@ -671,28 +677,22 @@
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
 
-        const dist = 20; // 槽位距离相机的深度
+        const dist = 20; 
         const vFOV = THREE.MathUtils.degToRad(camera.fov); 
         const visibleHeight = 2 * Math.tan(vFOV / 2) * dist;
         const visibleWidth = visibleHeight * camera.aspect;
         
         if (trayGroup) {
-            // 默认放在底部
             trayGroup.position.y = -visibleHeight / 2 + 2.5;
             trayGroup.position.z = -dist; 
             
-            // 计算槽位的实际宽度 (7个格子 * 3.5间距 + 边距) ≈ 25
             const trayWidth = 26; 
 
-            // 如果屏幕宽度( visibleWidth ) 小于 槽位宽度 (trayWidth)，说明屏幕太窄放不下了
             if (visibleWidth < trayWidth) {
-                // 缩小槽位组，留出 5% 的边距
                 const scale = (visibleWidth / trayWidth) * 0.95;
                 trayGroup.scale.set(scale, scale, scale);
-                // 稍微把槽位再抬高一点，因为缩小后视觉重心会变
                 trayGroup.position.y += 0.5;
             } else {
-                // 电脑宽屏，恢复原状
                 trayGroup.scale.set(1, 1, 1);
             }
         }
@@ -721,5 +721,4 @@
 </script>
 </body>
 </html>
-
-
+```
