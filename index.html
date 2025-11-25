@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>海龟大扫除 (手机修复版)</title>
+    <title>海龟大扫除 (防卡顿最终版)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Arial', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
         
-        /* UI 布局 */
-        #ui-container { position: absolute; top: 20px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 10; }
+        #ui-container { position: absolute; top: 10px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 10; }
         
         #score-container { color: white; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); margin-bottom: 5px; transition: transform 0.2s; }
         #score { font-size: 40px; font-weight: 900; color: #FFD700; text-shadow: 3px 3px 0px #d35400; }
@@ -17,10 +16,9 @@
         #progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #00b09b, #96c93d); border-radius: 8px; transition: width 0.5s ease-out; box-shadow: 0 0 10px rgba(150, 201, 61, 0.5); }
         #sub-text { font-size: 14px; margin-top: 5px; color: rgba(255,255,255,0.9); font-weight: bold; text-shadow: 1px 1px 2px black;}
 
-        #tutorial-hint { position: absolute; bottom: 22%; width: 100%; text-align: center; color: rgba(255,255,255,0.8); font-size: 14px; pointer-events: none; animation: pulse 2s infinite; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        #tutorial-hint { position: absolute; bottom: 30%; width: 100%; text-align: center; color: rgba(255,255,255,0.9); font-size: 16px; pointer-events: none; animation: pulse 2s infinite; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); font-weight: bold;}
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
-        /* 飘字特效 */
         .float-text { position: absolute; color: #FFD700; font-weight: bold; font-size: 40px; text-shadow: 2px 2px 0 #000; pointer-events: none; animation: floatUp 0.8s forwards; z-index: 20; left: 50%; top: 40%; transform: translate(-50%, -50%); }
         @keyframes floatUp {
             0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
@@ -51,7 +49,7 @@
     <div id="sub-text">清理进度: <span id="percent-text">0%</span></div>
 </div>
 
-<div id="tutorial-hint">↔ 滑动旋转海龟 | 点击拔除藤壶</div>
+<div id="tutorial-hint">↔ 旋转 | 🔍 双指缩放 | 👆 点击拔除</div>
 
 <div id="game-over" class="modal">
     <h1>槽位已满!</h1>
@@ -98,7 +96,14 @@
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
     let dragVelocity = { x: 0, y: 0 }; 
-    let hasMoved = false; // 用于区分点击和拖动
+    let hasMoved = false;
+
+    // 缩放变量
+    let currentZoomDist = 65; 
+    let targetZoomDist = 65;
+    const MIN_ZOOM = 35; 
+    const MAX_ZOOM = 85; 
+    let initialPinchDist = 0; 
 
     let score = 0;
     let clearedSetsCount = 0;
@@ -108,7 +113,7 @@
     let tray = []; 
     let fallingObjects = []; 
     let traySlotsMeshes = [];
-    let trayGroup; // 槽位组
+    let trayGroup; 
 
     const materialCache = {};
 
@@ -126,23 +131,20 @@
     function init() {
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB); 
-        scene.fog = new THREE.Fog(0x87CEEB, 30, 90);
+        scene.fog = new THREE.Fog(0x87CEEB, 40, 120);
 
-        // 摄像机设置
         camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // 初始化位置，稍后在 resize 里会根据屏幕比例微调
-        camera.position.set(0, 22, 35);
-        camera.lookAt(0, -2, 0);
+        camera.position.set(0, 30, currentZoomDist); 
+        camera.lookAt(0, -5, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.outputEncoding = THREE.sRGBEncoding;
-        // 针对高清屏优化
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
 
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -157,12 +159,11 @@
         
         window.addEventListener('resize', onWindowResize, false);
         
-        // 鼠标事件
         document.addEventListener('mousedown', onMouseDown, false);
         document.addEventListener('mousemove', onMouseMove, false);
         document.addEventListener('mouseup', onMouseUp, false);
+        document.addEventListener('wheel', onMouseWheel, {passive: false}); 
         
-        // 触摸事件
         document.addEventListener('touchstart', onTouchStart, {passive: false});
         document.addEventListener('touchmove', onTouchMove, {passive: false});
         document.addEventListener('touchend', onTouchEnd, false);
@@ -170,11 +171,9 @@
         createGameWorld();
         createTrayVisuals();
         
-        // 初始化一次布局调整
         onWindowResize();
     }
 
-    // --- 海龟模型 ---
     function createMainTurtle() {
         mainGroup = new THREE.Group();
         
@@ -182,7 +181,7 @@
         const skinColor = 0x8D6E63;  
         const bellyColor = 0xEFEBE9; 
 
-        // A. 龟壳
+        // 龟壳
         const shellGeo = new THREE.SphereGeometry(9, 32, 24, 0, Math.PI * 2, 0, Math.PI * 0.55);
         shellGeo.applyMatrix4(new THREE.Matrix4().makeScale(1, 0.7, 1));
         const shellMat = new THREE.MeshPhongMaterial({ color: shellColor, flatShading: true, shininess: 10 });
@@ -192,7 +191,7 @@
         shell.userData.isBarnaclePart = false;
         mainGroup.add(shell);
 
-        // B. 底部
+        // 底部
         const bellyGeo = new THREE.CircleGeometry(9, 32);
         bellyGeo.rotateX(Math.PI / 2); 
         const bellyMat = new THREE.MeshPhongMaterial({ color: bellyColor });
@@ -201,7 +200,7 @@
         belly.userData.isBarnaclePart = false;
         mainGroup.add(belly);
 
-        // C. 头
+        // 头
         const headGeo = new THREE.SphereGeometry(2.5, 16, 16);
         const headMat = new THREE.MeshPhongMaterial({ color: skinColor });
         const head = new THREE.Mesh(headGeo, headMat);
@@ -220,7 +219,7 @@
         mainGroup.add(eyeL);
         mainGroup.add(eyeR);
 
-        // D. 四肢 (胶囊体)
+        // 四肢
         const limbGeo = new THREE.CapsuleGeometry(1.2, 3, 4, 8);
         const createLimb = (x, z, rotY) => {
             const limb = new THREE.Mesh(limbGeo, headMat);
@@ -235,7 +234,7 @@
         createLimb(7, -6, Math.PI/4);  
         createLimb(-7, -6, -Math.PI/4);
 
-        // E. 尾巴
+        // 尾巴
         const tailGeo = new THREE.ConeGeometry(0.8, 3, 8);
         const tail = new THREE.Mesh(tailGeo, headMat);
         tail.position.set(0, 0.5, -9.5);
@@ -278,64 +277,103 @@
         return group;
     }
 
+    // --- 核心修改：生成藤壶时避开四肢和头部 ---
     function createGameWorld() {
         createMainTurtle();
 
-        for (let i = 0; i < TOTAL_BARNACLES; i++) {
-            const type = BARNACLE_TYPES[i % BARNACLE_TYPES.length];
-            const barnacle = createBarnacleGroup(type);
+        // 定义障碍物列表 (位置和半径) - 坐标是相对于海龟中心的
+        const obstacles = [
+            { x: 0, y: 1, z: 10, r: 4.5 },   // 头 (半径加大)
+            { x: 0, y: 0.5, z: -9.5, r: 3.5 }, // 尾
+            { x: 7, y: 0, z: 6, r: 4.0 },    // 左前腿
+            { x: -7, y: 0, z: 6, r: 4.0 },   // 右前腿
+            { x: 7, y: 0, z: -6, r: 4.0 },   // 左后腿
+            { x: -7, y: 0, z: -6, r: 4.0 }   // 右后腿
+        ];
 
+        let spawnedCount = 0;
+        let attempts = 0;
+
+        while (spawnedCount < TOTAL_BARNACLES && attempts < 2000) {
+            attempts++;
+            
+            // 随机位置
             const theta = Math.random() * Math.PI * 2; 
-            const phi = Math.random() * (Math.PI * 0.45); 
-
+            const phi = Math.random() * (Math.PI * 0.5); // 稍微放宽一点范围到赤道
+            
             const r = 8.8; 
             const x = r * Math.sin(phi) * Math.cos(theta);
             const y = (r * 0.7) * Math.cos(phi); 
             const z = r * Math.sin(phi) * Math.sin(theta);
 
+            // --- 碰撞检测核心逻辑 ---
+            let collision = false;
+            for (let obs of obstacles) {
+                const dx = x - obs.x;
+                const dy = y - obs.y;
+                const dz = z - obs.z;
+                // 计算距离平方
+                if (dx*dx + dy*dy + dz*dz < obs.r * obs.r) {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if (collision) continue; // 如果撞到了，就跳过这次循环，重新随
+
+            // 生成藤壶
+            const type = BARNACLE_TYPES[spawnedCount % BARNACLE_TYPES.length];
+            const barnacle = createBarnacleGroup(type);
+
             barnacle.position.set(x, y, z);
-            
             const normal = new THREE.Vector3(x, y / 0.7, z).normalize();
             barnacle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 
             mainGroup.add(barnacle);
+            spawnedCount++;
         }
-        
-        mainGroup.rotation.y = -Math.PI / 4;
-        mainGroup.rotation.x = 0.2;
     }
 
     function createTrayVisuals() {
         trayGroup = new THREE.Group();
 
-        // 槽位背景
+        // 背景
         const trayBgGeo = new THREE.BoxGeometry(TRAY_SLOTS * 3.6, 0.5, 4);
-        const trayBgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 });
+        const trayBgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 });
         const trayBg = new THREE.Mesh(trayBgGeo, trayBgMat);
         trayGroup.add(trayBg);
         
-        // 增加白色边框，防止消失
+        // 边框
         const edges = new THREE.EdgesGeometry(trayBgGeo);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 0.3, transparent: true } ) );
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial( { color: 0xffffff, opacity: 0.8, transparent: true } ) );
         trayGroup.add(line);
 
-        // 生成槽位坐标点
+        // 格子
         const startX = -(TRAY_SLOTS - 1) * 3.5 / 2;
+        const slotGeo = new THREE.BoxGeometry(3, 0.1, 3);
+        const slotEdgesGeo = new THREE.EdgesGeometry(slotGeo);
+        
         for (let i = 0; i < TRAY_SLOTS; i++) {
-            const slot = new THREE.Mesh(new THREE.BoxGeometry(3,0.1,3), new THREE.MeshBasicMaterial({visible:false}));
-            slot.position.set(startX + i * 3.5, 0.5, 0); // 相对坐标
+            const slot = new THREE.Mesh(slotGeo, new THREE.MeshBasicMaterial({ visible: false }));
+            slot.position.set(startX + i * 3.5, 0.5, 0); 
             trayGroup.add(slot);
-            traySlotsMeshes.push(slot); // 保存引用
+            traySlotsMeshes.push(slot); 
+            
+            const slotLine = new THREE.LineSegments(slotEdgesGeo, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3 }));
+            slotLine.position.copy(slot.position);
+            trayGroup.add(slotLine);
         }
         
-        // 初始位置，在 resize 中会更新
-        trayGroup.position.set(0, -12, 20);
+        trayGroup.position.set(0, -9, 20);
         scene.add(trayGroup);
     }
 
-    // ================= 交互逻辑 (修复手机点击) =================
+    function onMouseWheel(event) {
+        event.preventDefault();
+        targetZoomDist += event.deltaY * 0.05;
+        targetZoomDist = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoomDist));
+    }
 
-    // 鼠标按下
     function onMouseDown(event) {
         isDragging = true;
         hasMoved = false;
@@ -343,17 +381,11 @@
         dragVelocity = { x: 0, y: 0 };
     }
 
-    // 鼠标移动
     function onMouseMove(event) {
         if (!isDragging) return;
-
         const deltaX = event.clientX - previousMousePosition.x;
         const deltaY = event.clientY - previousMousePosition.y;
-
-        // 稍微移动一点就算拖动
-        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-            hasMoved = true;
-        }
+        if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) hasMoved = true;
 
         if (mainGroup) {
             const rotateSpeed = 0.005;
@@ -362,41 +394,39 @@
             mainGroup.rotation.x = Math.max(-0.5, Math.min(0.8, mainGroup.rotation.x));
             dragVelocity = { x: deltaX, y: deltaY }; 
         }
-
         previousMousePosition = { x: event.clientX, y: event.clientY };
     }
 
-    // 鼠标抬起
     function onMouseUp(event) {
         isDragging = false;
-        // 如果没有大幅移动，视作点击
-        if (!hasMoved) {
-             handleRaycast(event.clientX, event.clientY);
-        }
+        if (!hasMoved) handleRaycast(event.clientX, event.clientY);
     }
 
-    // --- 触摸处理 (关键修复) ---
     function onTouchStart(event) {
-        event.preventDefault(); // 防止滚动
+        event.preventDefault(); 
+        
         if(event.touches.length === 1) {
             isDragging = true;
             hasMoved = false;
             previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
             dragVelocity = { x: 0, y: 0 };
+        } 
+        else if (event.touches.length === 2) {
+            isDragging = false; 
+            const dx = event.touches[0].clientX - event.touches[1].clientX;
+            const dy = event.touches[0].clientY - event.touches[1].clientY;
+            initialPinchDist = Math.hypot(dx, dy);
         }
     }
 
     function onTouchMove(event) {
         event.preventDefault();
-        if (!isDragging) return;
-        if(event.touches.length === 1) {
+        
+        if(event.touches.length === 1 && isDragging) {
             const touch = event.touches[0];
             const deltaX = touch.clientX - previousMousePosition.x;
             const deltaY = touch.clientY - previousMousePosition.y;
-
-            if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
-                hasMoved = true;
-            }
+            if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) hasMoved = true;
 
             if (mainGroup) {
                 const rotateSpeed = 0.005;
@@ -407,12 +437,23 @@
             }
             previousMousePosition = { x: touch.clientX, y: touch.clientY };
         }
+        else if (event.touches.length === 2) {
+            const dx = event.touches[0].clientX - event.touches[1].clientX;
+            const dy = event.touches[0].clientY - event.touches[1].clientY;
+            const dist = Math.hypot(dx, dy);
+            
+            const scaleFactor = initialPinchDist / dist;
+            const zoomChange = (initialPinchDist - dist) * 0.1;
+            targetZoomDist += zoomChange;
+            targetZoomDist = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoomDist));
+            
+            initialPinchDist = dist; 
+        }
     }
 
     function onTouchEnd(event) {
         isDragging = false;
-        // 关键：触摸结束时 event.touches 是空的，要用 changedTouches
-        if (!hasMoved && event.changedTouches.length > 0) {
+        if (!hasMoved && event.changedTouches.length > 0 && event.touches.length === 0) {
             const touch = event.changedTouches[0];
             handleRaycast(touch.clientX, touch.clientY);
         }
@@ -442,8 +483,6 @@
             }
         }
     }
-
-    // ================= 游戏逻辑 =================
 
     function detachAndFall(barnacleGroup) {
         if (tray.length + fallingObjects.length >= TRAY_SLOTS) {
@@ -478,7 +517,6 @@
              insertIndex = tray.length;
         }
 
-        // 飞行数据
         const fallingObj = {
             mesh: barnacleGroup,
             velocity: new THREE.Vector3(0, 0, 0),
@@ -487,7 +525,6 @@
             finalIndex: insertIndex 
         };
         
-        // 弹射
         const ejectionForce = worldPos.clone().normalize().multiplyScalar(0.6);
         fallingObj.velocity.add(ejectionForce);
         fallingObj.velocity.y += 0.2; 
@@ -499,7 +536,6 @@
         const gravity = new THREE.Vector3(0, -0.35, 0); 
         const arrivalThreshold = 0.5; 
 
-        // 倒序遍历，安全删除
         for (let i = fallingObjects.length - 1; i >= 0; i--) {
             const objData = fallingObjects[i];
             const mesh = objData.mesh;
@@ -509,11 +545,7 @@
                 mesh.position.add(objData.velocity);
                 mesh.rotation.x += 0.1;
                 
-                // 动态获取目标槽位的世界坐标
-                // 这里我们简化：所有物体先飞向槽位中心高度
-                const trayY = trayGroup.position.y + 0.5 + 1.5; 
-                
-                // 引导向中间
+                const trayY = trayGroup.position.y + 2.0; 
                 const vectorToCenter = (0 - mesh.position.x) * 0.02;
                 objData.velocity.x += vectorToCenter;
 
@@ -545,23 +577,18 @@
         }
 
         tray.splice(insertIndex, 0, { typeName: typeName, meshGroup: mesh });
-        // 将物体添加到槽位组里，方便统一管理坐标
         scene.remove(mesh);
         trayGroup.add(mesh);
-        
         checkMatch();
     }
 
     function updateTrayPositions() {
-        // 更新槽位里所有物体的位置
         for(let i=0; i<tray.length; i++) {
-             // 目标是相对坐标
              const targetPos = traySlotsMeshes[i].position.clone();
-             targetPos.y += 1.5; // 浮在槽位上方
+             targetPos.y += 1.5; 
              
              const mesh = tray[i].meshGroup;
              mesh.position.lerp(targetPos, 0.2);
-             
              const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,0));
              mesh.quaternion.slerp(q, 0.2);
         }
@@ -593,7 +620,6 @@
                 document.getElementById('score-container').style.transform = "scale(1.3)";
                 setTimeout(() => document.getElementById('score-container').style.transform = "scale(1)", 150);
 
-                // 从槽位组移除
                 trayGroup.remove(tray[i].meshGroup);
                 trayGroup.remove(tray[i+1].meshGroup);
                 trayGroup.remove(tray[i+2].meshGroup);
@@ -634,29 +660,29 @@
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
 
-        // 关键：根据屏幕长宽比调整槽位位置
-        // 手机屏幕窄长，需要把槽位抬高，或者把摄像机拉远
         if (trayGroup) {
-            // 如果屏幕很窄 (手机竖屏)
             if (camera.aspect < 1) {
-                trayGroup.position.set(0, -14, 20); 
-                camera.position.set(0, 25, 45); // 拉远一点看全景
+                trayGroup.position.set(0, -9, 20); 
+                targetZoomDist = 65; 
             } else {
-                // 电脑横屏
-                trayGroup.position.set(0, -12, 20); 
-                camera.position.set(0, 22, 35);
+                trayGroup.position.set(0, -9, 20); 
+                targetZoomDist = 55; 
             }
-            camera.lookAt(0, -2, 0);
+            camera.lookAt(0, -3, 0);
         }
     }
 
     function animate() {
         requestAnimationFrame(animate);
 
+        if (Math.abs(camera.position.z - targetZoomDist) > 0.1) {
+            camera.position.z += (targetZoomDist - camera.position.z) * 0.1;
+        }
+        currentZoomDist = camera.position.z;
+
         if (!isDragging && mainGroup && !isGameOver) {
             dragVelocity.x *= 0.95;
             dragVelocity.y *= 0.95;
-            
             mainGroup.rotation.y += dragVelocity.x * 0.005;
             mainGroup.rotation.x += dragVelocity.y * 0.005;
             mainGroup.position.y = Math.sin(Date.now() * 0.001) * 0.2;
