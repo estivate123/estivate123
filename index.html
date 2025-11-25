@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>体素拔藤壶 (进度条版)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Arial', sans-serif; user-select: none; }
+        
+        /* --- UI 区域 --- */
+        #ui-container { position: absolute; top: 20px; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 10; }
+        
+        /* 得分显示 (增加文字阴影和过渡动画) */
+        #score-container { color: white; text-shadow: 2px 2px 0px rgba(0,0,0,0.5); margin-bottom: 10px; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        #score-label { font-size: 18px; font-weight: bold; }
+        #score { font-size: 36px; font-weight: 900; color: #FFD700; text-shadow: 2px 2px 0px #d35400; }
+        
+        /* 进度条容器 */
+        #progress-wrapper { width: 60%; max-width: 300px; height: 16px; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 3px; backdrop-filter: blur(2px); border: 1px solid rgba(255,255,255,0.2); }
+        
+        /* 实际进度条 */
+        #progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #66ff66, #00cc00); border-radius: 8px; transition: width 0.5s cubic-bezier(0.4, 0.0, 0.2, 1); box-shadow: 0 0 10px #66ff66; }
+
+        #sub-text { font-size: 14px; margin-top: 8px; color: rgba(255,255,255,0.8); text-shadow: 1px 1px 1px rgba(0,0,0,0.5); }
+
+        /* --- 飘字特效 --- */
+        .float-text { position: absolute; color: #FFD700; font-weight: bold; font-size: 40px; text-shadow: 2px 2px 0 #000; pointer-events: none; animation: floatUp 1s forwards; z-index: 20; left: 50%; top: 40%; transform: translate(-50%, -50%); }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            50% { transform: translate(-50%, -150%) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -200%) scale(1); }
+        }
+        
+        /* 弹窗样式 */
+        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 40px; border-radius: 15px; text-align: center; z-index: 100; min-width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(5px); animation: popIn 0.3s; }
+        @keyframes popIn { from {transform: translate(-50%, -50%) scale(0.8); opacity: 0;} to {transform: translate(-50%, -50%) scale(1); opacity: 1;} }
+        
+        #game-over h1 { margin: 0 0 20px 0; color: #ff6b6b; font-size: 32px; }
+        #game-win h1 { margin: 0 0 10px 0; color: #FFD700; font-size: 36px; text-shadow: 0 0 10px orange; }
+        
+        button { padding: 12px 30px; font-size: 20px; cursor: pointer; background: #4CAF50; border: none; color: white; border-radius: 50px; pointer-events: all; transition: transform 0.1s; font-weight: bold; box-shadow: 0 4px 0 #2E7D32; margin-top: 20px;}
+        button:active { transform: scale(0.95); box-shadow: 0 1px 0 #2E7D32; translateY(3px); }
+        button.restart-btn { background: #2196F3; box-shadow: 0 4px 0 #1565C0; } 
+
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px black;}
+    </style>
+</head>
+<body>
+
+<div id="loading">资源加载中...</div>
+
+<div id="ui-container">
+    <div id="score-container">
+        <span id="score-label">SCORE</span><br>
+        <span id="score">0</span>
+    </div>
+    
+    <div id="progress-wrapper">
+        <div id="progress-bar"></div>
+    </div>
+    
+    <div id="sub-text">清理度: <span id="percent-text">0%</span></div>
+</div>
+
+<div id="game-over" class="modal">
+    <h1>槽位已满!</h1>
+    <p>当前进度: <span id="final-percent-lose">0%</span></p>
+    <p>最终得分: <span id="final-score-lose">0</span></p>
+    <button onclick="location.reload()">再试一次</button>
+</div>
+
+<div id="game-win" class="modal">
+    <h1>完美清理!</h1>
+    <p>强迫症极其舒适</p>
+    <p style="font-size: 24px; color: #FFD700; font-weight: bold;">得分: <span id="final-score-win">0</span></p>
+    <button class="restart-btn" onclick="location.reload()">再来一局</button>
+</div>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+    window.onload = function() {
+        if (typeof THREE === 'undefined') {
+            alert("Three.js 加载失败，请检查网络！");
+        } else {
+            document.getElementById('loading').style.display = 'none';
+            init();
+            animate();
+        }
+    };
+
+    // ================= 配置区域 =================
+    const TRAY_SLOTS = 7; 
+    const BARNACLE_TYPES = [
+        { color: 0xFF4500, name: 'red' },    
+        { color: 0xFFD700, name: 'yellow' }, 
+        { color: 0x32CD32, name: 'green' },  
+        { color: 0x1E90FF, name: 'blue' },   
+        { color: 0xFF69B4, name: 'pink' }    
+    ];
+    const TOTAL_BARNACLES = 60; 
+
+    // ================= 全局变量 =================
+    let scene, camera, renderer;
+    let mainRockGroup;
+    let raycaster, mouse;
+    
+    // 计分相关
+    let score = 0;
+    let clearedSetsCount = 0; // 记录消除了几组，用于计算递增倍率
+
+    let remainingBarnacles = TOTAL_BARNACLES; 
+    let isGameOver = false;
+
+    let tray = []; 
+    let fallingObjects = []; 
+    let traySlotsMeshes = [];
+
+    const materialCache = {};
+
+    function getMaterial(colorHex) {
+        if (!materialCache[colorHex]) {
+            materialCache[colorHex] = new THREE.MeshPhongMaterial({ 
+                color: colorHex,
+                flatShading: true,
+                shininess: 30 
+            });
+        }
+        return materialCache[colorHex];
+    }
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.Fog(0x87CEEB, 40, 120);
+
+        camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 25, 55);
+        camera.lookAt(0, -8, 0);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(20, 40, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        scene.add(dirLight);
+
+        raycaster = new THREE.Raycaster();
+        mouse = new THREE.Vector2();
+        
+        window.addEventListener('resize', onWindowResize, false);
+        document.addEventListener('mousedown', onClick, false);
+        document.addEventListener('touchstart', onTouch, {passive: false});
+
+        createGameWorld();
+        createTrayVisuals();
+    }
+
+    // --- 石头生成 ---
+    function createMainRock() {
+        mainRockGroup = new THREE.Group();
+        const rockColor = 0x696969; 
+        const radius = 8;
+        
+        const coreGeo = new THREE.IcosahedronGeometry(radius - 0.5, 1);
+        const coreMat = new THREE.MeshPhongMaterial({
+            color: rockColor, 
+            flatShading: true,
+            shininess: 10
+        }); 
+        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        coreMesh.userData.isBarnaclePart = false;
+        coreMesh.castShadow = true;
+        coreMesh.receiveShadow = true;
+        mainRockGroup.add(coreMesh);
+
+        scene.add(mainRockGroup);
+    }
+
+    // --- 藤壶生成 (火山簇) ---
+    function createBarnacleGroup(typeData) {
+        const group = new THREE.Group();
+        group.userData.isBarnacle = true; 
+        group.userData.typeName = typeData.name;
+        
+        const count = Math.floor(Math.random() * 3) + 3; 
+        
+        for(let i=0; i<count; i++) {
+             const topR = 0.2 + Math.random() * 0.2;
+             const botR = 0.4 + Math.random() * 0.3;
+             const height = 0.6 + Math.random() * 0.5;
+             
+             const geo = new THREE.CylinderGeometry(topR, botR, height, 7);
+             geo.translate(0, height/2, 0); 
+
+             const mesh = new THREE.Mesh(geo, getMaterial(typeData.color));
+             const angle = Math.random() * Math.PI * 2;
+             const dist = Math.random() * 0.5;
+             mesh.position.set(Math.cos(angle)*dist, 0, Math.sin(angle)*dist);
+             mesh.rotation.x = (Math.random()-0.5) * 0.5;
+             mesh.rotation.z = (Math.random()-0.5) * 0.5;
+
+             mesh.castShadow = true;
+             mesh.receiveShadow = true;
+             mesh.userData.isBarnaclePart = true;
+             
+             group.add(mesh);
+        }
+        const scale = 0.9 + Math.random() * 0.4;
+        group.scale.set(scale, scale, scale);
+        
+        return group;
+    }
+
+    function createGameWorld() {
+        createMainRock();
+
+        for (let i = 0; i < TOTAL_BARNACLES; i++) {
+            const type = BARNACLE_TYPES[i % BARNACLE_TYPES.length];
+            const barnacle = createBarnacleGroup(type);
+
+            const theta = Math.random() * Math.PI * 2; 
+            const phi = Math.acos(2 * Math.random() - 1); 
+            const surfaceRadius = 7.8; 
+
+            const x = surfaceRadius * Math.sin(phi) * Math.cos(theta);
+            const y = surfaceRadius * Math.sin(phi) * Math.sin(theta);
+            const z = surfaceRadius * Math.cos(phi);
+
+            barnacle.position.set(x, y, z);
+            barnacle.lookAt(0,0,0);
+            mainRockGroup.add(barnacle);
+        }
+    }
+
+    function createTrayVisuals() {
+        const slotGeo = new THREE.BoxGeometry(3, 0.5, 3);
+        const slotMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2 });
+        const startX = -(TRAY_SLOTS - 1) * 3.5 / 2;
+        
+        for (let i = 0; i < TRAY_SLOTS; i++) {
+            const slot = new THREE.Mesh(slotGeo, slotMat);
+            slot.position.set(startX + i * 3.5, -18, 20);
+            scene.add(slot);
+            traySlotsMeshes.push(slot);
+        }
+    }
+
+    function onTouch(event) {
+        event.preventDefault(); 
+        if (event.touches.length > 0) {
+            event.clientX = event.touches[0].clientX;
+            event.clientY = event.touches[0].clientY;
+            onClick(event);
+        }
+    }
+
+    function onClick(event) {
+        if (isGameOver) return;
+
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(mainRockGroup.children, true);
+
+        if (intersects.length > 0) {
+            const hitObj = intersects[0].object;
+
+            if (hitObj.userData.isBarnaclePart) {
+                let barnacleGroup = hitObj.parent;
+                while(barnacleGroup && !barnacleGroup.userData.isBarnacle) {
+                    barnacleGroup = barnacleGroup.parent;
+                }
+
+                if (barnacleGroup && barnacleGroup.userData.isBarnacle) {
+                    detachAndFall(barnacleGroup);
+                }
+            }
+        }
+    }
+
+    function detachAndFall(barnacleGroup) {
+        if (tray.length + fallingObjects.length >= TRAY_SLOTS) return;
+
+        const worldPos = new THREE.Vector3();
+        barnacleGroup.getWorldPosition(worldPos);
+        const worldQuat = new THREE.Quaternion();
+        barnacleGroup.getWorldQuaternion(worldQuat);
+
+        mainRockGroup.remove(barnacleGroup);
+        scene.add(barnacleGroup);
+        barnacleGroup.position.copy(worldPos);
+        barnacleGroup.quaternion.copy(worldQuat);
+
+        const targetSlotIndex = tray.length + fallingObjects.length;
+        const targetPos = traySlotsMeshes[targetSlotIndex].position.clone();
+        targetPos.y += 2.0;
+
+        fallingObjects.push({
+            mesh: barnacleGroup,
+            velocity: new THREE.Vector3(0, 0, 0),
+            targetPos: targetPos,
+            typeName: barnacleGroup.userData.typeName,
+            isSeated: false 
+        });
+
+        const ejectionForce = worldPos.clone().normalize().multiplyScalar(0.8);
+        fallingObjects[fallingObjects.length-1].velocity.add(ejectionForce);
+    }
+
+    function updateFallingObjects() {
+        const gravity = new THREE.Vector3(0, -0.25, 0); 
+        const arrivalThreshold = 0.5; 
+
+        for (let i = fallingObjects.length - 1; i >= 0; i--) {
+            const objData = fallingObjects[i];
+            const mesh = objData.mesh;
+
+            if (!objData.isSeated) {
+                objData.velocity.add(gravity);
+                mesh.position.add(objData.velocity);
+                mesh.rotation.x += 0.05;
+                mesh.rotation.z += 0.02;
+
+                const vectorToTarget = objData.targetPos.clone().sub(mesh.position);
+                vectorToTarget.y = 0; 
+                objData.velocity.add(vectorToTarget.multiplyScalar(0.015));
+
+                if (mesh.position.y <= objData.targetPos.y + arrivalThreshold) {
+                     objData.isSeated = true;
+                     objData.velocity.set(0,0,0);
+                }
+            } else {
+                mesh.position.lerp(objData.targetPos, 0.25);
+                const uprightQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,0));
+                mesh.quaternion.slerp(uprightQ, 0.25);
+
+                if (mesh.position.distanceTo(objData.targetPos) < 0.1) {
+                    mesh.position.copy(objData.targetPos);
+                    mesh.rotation.set(0,0,0);
+                    fallingObjects.splice(i, 1);
+                    addToTray(objData.typeName, mesh);
+                }
+            }
+        }
+    }
+
+    function addToTray(typeName, meshGroup) {
+        tray.push({ typeName: typeName, meshGroup: meshGroup });
+        checkMatch();
+        updateTrayPositions(); 
+    }
+
+    function updateTrayPositions() {
+        for(let i=0; i<tray.length; i++) {
+             const targetPos = traySlotsMeshes[i].position.clone();
+             targetPos.y += 2.0;
+             tray[i].meshGroup.position.copy(targetPos);
+        }
+    }
+
+    // --- 核心：进度条更新函数 ---
+    function updateProgress() {
+        const cleared = TOTAL_BARNACLES - remainingBarnacles;
+        const percent = Math.floor((cleared / TOTAL_BARNACLES) * 100);
+        
+        document.getElementById('progress-bar').style.width = percent + '%';
+        document.getElementById('percent-text').innerText = percent + '%';
+    }
+
+    // --- 核心：飘字特效 ---
+    function showFloatingText(text) {
+        const div = document.createElement('div');
+        div.className = 'float-text';
+        div.innerText = text;
+        document.body.appendChild(div);
+        
+        // 动画结束后移除元素
+        setTimeout(() => {
+            document.body.removeChild(div);
+        }, 1000);
+    }
+
+    function checkMatch() {
+        const counts = {};
+        tray.forEach(item => {
+            counts[item.typeName] = (counts[item.typeName] || 0) + 1;
+        });
+
+        for (const type in counts) {
+            if (counts[type] >= 3) {
+                
+                // --- 1. 计算递增得分 ---
+                // 基础分10分，每消除一组，倍率+1
+                // 第1组: 10分, 第2组: 20分 ... 第20组: 200分
+                clearedSetsCount++; 
+                const gain = clearedSetsCount * 10;
+                score += gain;
+                
+                // --- 2. 更新分数显示与特效 ---
+                const scoreEl = document.getElementById('score');
+                scoreEl.innerText = score;
+                // 分数跳动动画
+                const scoreContainer = document.getElementById('score-container');
+                scoreContainer.style.transform = "scale(1.2)";
+                setTimeout(() => scoreContainer.style.transform = "scale(1)", 200);
+                
+                // 飘字
+                showFloatingText("+" + gain);
+
+                // --- 3. 消除逻辑 ---
+                remainingBarnacles -= 3;
+                updateProgress(); // 更新进度条
+
+                let removedCount = 0;
+                for (let i = tray.length - 1; i >= 0; i--) {
+                    if (tray[i].typeName === type && removedCount < 3) {
+                        scene.remove(tray[i].meshGroup);
+                        tray.splice(i, 1);
+                        removedCount++;
+                    }
+                }
+
+                if (remainingBarnacles <= 0) {
+                    gameWin();
+                } else {
+                    checkGameOver();
+                }
+                return; 
+            }
+        }
+        checkGameOver();
+    }
+
+    function checkGameOver() {
+        if (tray.length >= TRAY_SLOTS) {
+            isGameOver = true;
+            
+            // 计算当前百分比用于失败显示
+            const cleared = TOTAL_BARNACLES - remainingBarnacles;
+            const percent = Math.floor((cleared / TOTAL_BARNACLES) * 100);
+            
+            document.getElementById('final-percent-lose').innerText = percent + "%";
+            document.getElementById('final-score-lose').innerText = score;
+            document.getElementById('game-over').style.display = 'block';
+        }
+    }
+
+    function gameWin() {
+        isGameOver = true;
+        document.getElementById('final-score-win').innerText = score;
+        document.getElementById('game-win').style.display = 'block';
+        
+        if (mainRockGroup) {
+            const winAnim = () => {
+                mainRockGroup.rotation.y += 0.1;
+                mainRockGroup.rotation.x += 0.05;
+                mainRockGroup.scale.multiplyScalar(0.98);
+                if(mainRockGroup.scale.x > 0.1) requestAnimationFrame(winAnim);
+            };
+            winAnim();
+        }
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (!isGameOver && mainRockGroup) {
+            mainRockGroup.rotation.y += 0.002;
+            mainRockGroup.rotation.x += 0.001;
+            updateFallingObjects();
+        }
+        renderer.render(scene, camera);
+    }
+</script>
+</body>
+</html>
