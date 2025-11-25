@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>海龟大扫除 (智能吸附版)</title>
+    <title>海龟大扫除 (修复版)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Arial', sans-serif; user-select: none; }
         
@@ -71,7 +71,7 @@
     <button class="restart-btn" onclick="location.reload()">再来一局</button>
 </div>
 
-<script src="https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/three.js/0.160.0/three.min.js"></script>
 
 <script>
     window.onload = function() {
@@ -97,21 +97,21 @@
 
     // ================= 全局变量 =================
     let scene, camera, renderer;
-    let mainGroup; // 包含海龟和藤壶的总组
-    let turtleMesh; // 仅海龟模型
+    let mainGroup; 
+    let turtleMesh; 
     let raycaster, mouse;
     
     // 交互状态
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
-    let dragVelocity = { x: 0, y: 0 }; // 用于惯性滑动
+    let dragVelocity = { x: 0, y: 0 }; 
 
     let score = 0;
     let clearedSetsCount = 0;
     let remainingBarnacles = TOTAL_BARNACLES; 
     let isGameOver = false;
 
-    let tray = []; // 存放: { typeName, meshGroup, targetIndex }
+    let tray = []; 
     let fallingObjects = []; 
     let traySlotsMeshes = [];
 
@@ -133,7 +133,7 @@
         scene.background = new THREE.Color(0x87CEEB); 
         scene.fog = new THREE.Fog(0x87CEEB, 35, 90);
 
-        // 调整相机：拉近一点，看清海龟
+        // 调整相机
         camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 22, 35);
         camera.lookAt(0, -2, 0);
@@ -144,14 +144,13 @@
         renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
-        // 灯光优化
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
 
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
         dirLight.position.set(15, 30, 20);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 2048; // 阴影更清晰
+        dirLight.shadow.mapSize.width = 2048; 
         dirLight.shadow.mapSize.height = 2048;
         scene.add(dirLight);
 
@@ -160,7 +159,6 @@
         
         window.addEventListener('resize', onWindowResize, false);
         
-        // 绑定拖拽事件
         document.addEventListener('mousedown', onMouseDown, false);
         document.addEventListener('mousemove', onMouseMove, false);
         document.addEventListener('mouseup', onMouseUp, false);
@@ -173,7 +171,7 @@
         createTrayVisuals();
     }
 
-    // --- 1. 创建海龟模型 (替代石头) ---
+    // --- 1. 创建海龟模型 ---
     function createMainTurtle() {
         mainGroup = new THREE.Group();
         
@@ -181,11 +179,8 @@
         const skinColor = 0x8D6E63;  // 棕色皮肤
         const bellyColor = 0xEFEBE9; // 浅色腹部
 
-        // A. 龟壳 (半个压扁的球体)
-        // 使用 SphereGeometry(radius, wSeg, hSeg, phiStart, phiLength, thetaStart, thetaLength)
-        // thetaLength = Math.PI * 0.6 截取上半部分
+        // A. 龟壳
         const shellGeo = new THREE.SphereGeometry(9, 32, 24, 0, Math.PI * 2, 0, Math.PI * 0.55);
-        // Y轴压扁一点
         shellGeo.applyMatrix4(new THREE.Matrix4().makeScale(1, 0.7, 1));
         const shellMat = new THREE.MeshPhongMaterial({ color: shellColor, flatShading: true, shininess: 10 });
         const shell = new THREE.Mesh(shellGeo, shellMat);
@@ -194,12 +189,12 @@
         shell.userData.isBarnaclePart = false;
         mainGroup.add(shell);
 
-        // B. 龟壳底部 (封口)
+        // B. 龟壳底部
         const bellyGeo = new THREE.CircleGeometry(9, 32);
-        bellyGeo.rotateX(Math.PI / 2); // 旋转放平
+        bellyGeo.rotateX(Math.PI / 2); 
         const bellyMat = new THREE.MeshPhongMaterial({ color: bellyColor });
         const belly = new THREE.Mesh(bellyGeo, bellyMat);
-        belly.position.y = 0.1; // 稍微往上一点防止闪烁
+        belly.position.y = 0.1; 
         belly.userData.isBarnaclePart = false;
         mainGroup.add(belly);
 
@@ -207,8 +202,8 @@
         const headGeo = new THREE.SphereGeometry(2.5, 16, 16);
         const headMat = new THREE.MeshPhongMaterial({ color: skinColor });
         const head = new THREE.Mesh(headGeo, headMat);
-        head.position.set(0, 1, 10); // 放在前面
-        head.scale.set(1, 1, 1.2); // 拉长一点
+        head.position.set(0, 1, 10); 
+        head.scale.set(1, 1, 1.2); 
         head.userData.isBarnaclePart = false;
         mainGroup.add(head);
         
@@ -222,7 +217,7 @@
         mainGroup.add(eyeL);
         mainGroup.add(eyeR);
 
-        // D. 四肢 (胶囊状)
+        // D. 四肢 (注意：这里需要 0.137+ 版本支持 CapsuleGeometry)
         const limbGeo = new THREE.CapsuleGeometry(1.2, 3, 4, 8);
         const createLimb = (x, z, rotY) => {
             const limb = new THREE.Mesh(limbGeo, headMat);
@@ -232,10 +227,10 @@
             limb.userData.isBarnaclePart = false;
             mainGroup.add(limb);
         };
-        createLimb(7, 6, -Math.PI/4);  // 左前
-        createLimb(-7, 6, Math.PI/4);  // 右前
-        createLimb(7, -6, Math.PI/4);  // 左后
-        createLimb(-7, -6, -Math.PI/4);// 右后
+        createLimb(7, 6, -Math.PI/4);  
+        createLimb(-7, 6, Math.PI/4);  
+        createLimb(7, -6, Math.PI/4);  
+        createLimb(-7, -6, -Math.PI/4);
 
         // E. 尾巴
         const tailGeo = new THREE.ConeGeometry(0.8, 3, 8);
@@ -246,10 +241,10 @@
         mainGroup.add(tail);
 
         scene.add(mainGroup);
-        turtleMesh = mainGroup; // 引用保存，用于旋转
+        turtleMesh = mainGroup; 
     }
 
-    // --- 藤壶生成 (火山簇) ---
+    // --- 藤壶生成 ---
     function createBarnacleGroup(typeData) {
         const group = new THREE.Group();
         group.userData.isBarnacle = true; 
@@ -277,7 +272,6 @@
              
              group.add(mesh);
         }
-        // 随机缩放
         const scale = 0.8 + Math.random() * 0.4;
         group.scale.set(scale, scale, scale);
         return group;
@@ -286,63 +280,51 @@
     function createGameWorld() {
         createMainTurtle();
 
-        // 在龟壳上生成藤壶
         for (let i = 0; i < TOTAL_BARNACLES; i++) {
             const type = BARNACLE_TYPES[i % BARNACLE_TYPES.length];
             const barnacle = createBarnacleGroup(type);
 
-            // 分布逻辑：主要分布在上半球，不要长在肚子上
-            // 使用球坐标系，但限制 Phi 的范围
-            const theta = Math.random() * Math.PI * 2; // 水平 360度
-            const phi = Math.random() * (Math.PI * 0.45); // 垂直 0(顶点) 到 0.45 PI (接近赤道)
+            const theta = Math.random() * Math.PI * 2; 
+            const phi = Math.random() * (Math.PI * 0.45); 
 
-            // 根据龟壳的缩放比例计算位置 (Y轴 0.7)
-            const r = 8.8; // 稍微埋进去一点点，看起来像长在上面的
+            const r = 8.8; 
             const x = r * Math.sin(phi) * Math.cos(theta);
-            const y = (r * 0.7) * Math.cos(phi); // 注意这里乘了龟壳的Y缩放
+            const y = (r * 0.7) * Math.cos(phi); 
             const z = r * Math.sin(phi) * Math.sin(theta);
 
             barnacle.position.set(x, y, z);
             
-            // 计算法线朝向，让藤壶垂直于曲面生长
-            // 简单的法线计算：位置 - 球心(0,0,0)，但要注意Y轴缩放
             const normal = new THREE.Vector3(x, y / 0.7, z).normalize();
             barnacle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 
             mainGroup.add(barnacle);
         }
         
-        // 初始给海龟一个随机角度
         mainGroup.rotation.y = -Math.PI / 4;
         mainGroup.rotation.x = 0.2;
     }
 
     function createTrayVisuals() {
-        // 槽位背景条
         const trayBgGeo = new THREE.BoxGeometry(TRAY_SLOTS * 3.6, 0.5, 4);
         const trayBgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 });
         const trayBg = new THREE.Mesh(trayBgGeo, trayBgMat);
         trayBg.position.set(0, -17, 20);
         scene.add(trayBg);
 
-        // 生成槽位坐标点
         const startX = -(TRAY_SLOTS - 1) * 3.5 / 2;
         for (let i = 0; i < TRAY_SLOTS; i++) {
             const slot = new THREE.Mesh(new THREE.BoxGeometry(3,0.1,3), new THREE.MeshBasicMaterial({visible:false}));
-            slot.position.set(startX + i * 3.5, -16.5, 20); // 抬高一点
+            slot.position.set(startX + i * 3.5, -16.5, 20); 
             traySlotsMeshes.push(slot);
         }
     }
 
-    // ================= 交互逻辑 (拖拽旋转 & 点击) =================
+    // ================= 交互逻辑 =================
 
     function onMouseDown(event) {
         isDragging = true;
         previousMousePosition = { x: event.clientX, y: event.clientY };
         dragVelocity = { x: 0, y: 0 };
-        
-        // 只有点击（没有大幅移动）才触发射线检测
-        // 我们在 mouseUp 里判断是否是“点击”
     }
 
     function onMouseMove(event) {
@@ -354,15 +336,11 @@
         };
 
         if (mainGroup) {
-            // 旋转逻辑：X轴移动旋转Y，Y轴移动旋转X
             const rotateSpeed = 0.005;
             mainGroup.rotation.y += deltaMove.x * rotateSpeed;
             mainGroup.rotation.x += deltaMove.y * rotateSpeed;
-            
-            // 限制X轴旋转角度，防止海龟翻肚皮
             mainGroup.rotation.x = Math.max(-0.5, Math.min(0.8, mainGroup.rotation.x));
-            
-            dragVelocity = { x: deltaMove.x, y: deltaMove.y }; // 记录速度用于惯性
+            dragVelocity = { x: deltaMove.x, y: deltaMove.y }; 
         }
 
         previousMousePosition = { x: event.clientX, y: event.clientY };
@@ -370,16 +348,11 @@
 
     function onMouseUp(event) {
         isDragging = false;
-        
-        // 判断是“拖动”还是“点击”
-        // 如果移动距离很小，视作点击
-        // 由于我们在move里更新了previous，这里用dragVelocity粗略判断
         if (Math.abs(dragVelocity.x) < 2 && Math.abs(dragVelocity.y) < 2) {
              handleRaycast(event.clientX, event.clientY);
         }
     }
 
-    // 触摸支持
     function onTouchStart(event) {
         event.preventDefault();
         if(event.touches.length === 1) {
@@ -400,21 +373,17 @@
         mouse.y = -(clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
-        // 只检测 mainGroup 的子对象
         const intersects = raycaster.intersectObjects(mainGroup.children, true);
 
         if (intersects.length > 0) {
-            // 找到最近的交点
             const hitObj = intersects[0].object;
 
             if (hitObj.userData.isBarnaclePart) {
-                // 向上查找组
                 let barnacleGroup = hitObj.parent;
                 while(barnacleGroup && !barnacleGroup.userData.isBarnacle) {
                     barnacleGroup = barnacleGroup.parent;
                 }
                 
-                // 必须在主组里才行（防止点到正在下落的）
                 if (barnacleGroup && barnacleGroup.parent === mainGroup) {
                     detachAndFall(barnacleGroup);
                 }
@@ -422,17 +391,14 @@
         }
     }
 
-    // ================= 核心游戏逻辑：智能吸附 =================
+    // ================= 游戏逻辑 =================
 
     function detachAndFall(barnacleGroup) {
-        // 检查槽位是否真正满了（包括正在飞的和已经在槽里的）
         if (tray.length + fallingObjects.length >= TRAY_SLOTS) {
-            // 震动反馈
             if(navigator.vibrate) navigator.vibrate(50);
             return;
         }
 
-        // 1. 坐标转换
         const worldPos = new THREE.Vector3();
         barnacleGroup.getWorldPosition(worldPos);
         const worldQuat = new THREE.Quaternion();
@@ -445,12 +411,8 @@
 
         const typeName = barnacleGroup.userData.typeName;
 
-        // 2. 计算智能插入位置 (Auto-Sorting Logic)
-        // 逻辑：找到槽里最后一个同色物体，插在它后面
-        let insertIndex = tray.length + fallingObjects.length; // 默认放最后
+        let insertIndex = tray.length + fallingObjects.length; 
         
-        // 遍历当前槽位（tray）和正在下落的队列（fallingObjects 的假想位置）
-        // 为了简化，我们只看 tray 里的同色
         let lastSameColorIndex = -1;
         for (let i = 0; i < tray.length; i++) {
             if (tray[i].typeName === typeName) {
@@ -458,66 +420,28 @@
             }
         }
         
-        // 如果找到了同色，就插在它后面
         if (lastSameColorIndex !== -1) {
             insertIndex = lastSameColorIndex + 1;
         } else {
-             // 如果没找到同色，就放在最后
              insertIndex = tray.length;
         }
 
-        // 3. 视觉上挤开位置
-        // 如果我们要插在中间，那么 index >= insertIndex 的所有物体都要往右移
-        for (let i = insertIndex; i < tray.length; i++) {
-            // 简单的位移
-             const nextSlotPos = traySlotsMeshes[i + 1].position.clone();
-             nextSlotPos.y += 1.5;
-             // 使用简单的动画让它们滑过去
-             const item = tray[i];
-             // 这里我们直接修改它的目标位置，updateTrayPositions 会处理
-        }
-
-        // 4. 将这个“占位符”插入数据结构，防止后续物体算错位置
-        // 但物体还在天上飞，所以我们先用一个占位逻辑
-        // 更好的做法：直接加入 tray，但是标记状态为 "flying"，这样后续的点击就能算对位置
-        
-        // 这里采用简化版：先加入 fallingObjects，落地后再执行真正的 array splice
-        // 但是为了吸附效果，我们必须在起飞时就决定它的落点
-        
-        // 我们创建一个临时数据结构来管理目标索引
         const fallingObj = {
             mesh: barnacleGroup,
             velocity: new THREE.Vector3(0, 0, 0),
             typeName: typeName,
             isSeated: false,
-            finalIndex: insertIndex // 预定位置
+            finalIndex: insertIndex 
         };
         
-        // 物理弹射效果
         const ejectionForce = worldPos.clone().normalize().multiplyScalar(0.6);
         fallingObj.velocity.add(ejectionForce);
-        fallingObj.velocity.y += 0.2; // 往上跳一下
+        fallingObj.velocity.y += 0.2; 
 
         fallingObjects.push(fallingObj);
 
-        // 如果我们是插队，需要把现有的 tray 里的东西往后挪
-        // 这一步仅仅是视觉上的挪动，数据还没变
         if (insertIndex < tray.length) {
-            shiftTrayItems(insertIndex);
-        }
-    }
-
-    function shiftTrayItems(startIndex) {
-        // 让 startIndex 之后的所有物体往右移动一格
-        // 我们给它们一个 temporary offset
-        for (let i = startIndex; i < tray.length; i++) {
-             const mesh = tray[i].meshGroup;
-             // 计算新位置
-             const newPos = traySlotsMeshes[i + 1].position.clone();
-             newPos.y += 1.5;
-             // 简单的 lerp 在 animate 中处理，这里我们给它打个标记或者直接开始移动动画
-             // 为了简单，我们直接在这个函数里做一次性位移逻辑不太好，
-             // 最好的办法是在 animate 里每一帧都根据 tray 的 index 强制修正位置
+            // 简单位移，下一帧会自动平滑修正
         }
     }
 
@@ -525,33 +449,16 @@
         const gravity = new THREE.Vector3(0, -0.35, 0); 
         const arrivalThreshold = 0.5; 
 
-        // 倒序遍历
         for (let i = fallingObjects.length - 1; i >= 0; i--) {
             const objData = fallingObjects[i];
             const mesh = objData.mesh;
 
-            // 动态计算目标位置：因为可能有新的东西插队，或者前面的消除了
-            // 这是一个难点。简化处理：
-            // 如果它还在飞，我们先假定它是去 tray 的最后，或者是我们计算好的 finalIndex
-            // 但如果同时点了两个红色的，第二个红色的 finalIndex 会变吗？
-            
-            // 修正策略：
-            // 我们让飞行的物体也参与“排序”。
-            // 但为了代码不至于太复杂爆炸，我们采用：
-            // 1. 落地时，寻找当前 tray 里同色的最后一个位置，插进去。
-            // 2. 飞的过程中，只飞向大概的区域（底部中央）。
-            
-            // --- 重新设计下落逻辑 ---
             if (!objData.isSeated) {
-                // 物理运动
                 objData.velocity.add(gravity);
                 mesh.position.add(objData.velocity);
                 mesh.rotation.x += 0.1;
                 
-                // 目标高度判断
                 const targetY = -16.5 + 1.5;
-                
-                // 简单的引导：往中间飞
                 const centerX = 0;
                 const vectorToCenter = (centerX - mesh.position.x) * 0.02;
                 objData.velocity.x += vectorToCenter;
@@ -559,7 +466,6 @@
                 if (mesh.position.y <= targetY + arrivalThreshold) {
                      objData.isSeated = true;
                      objData.velocity.set(0,0,0);
-                     // 落地瞬间！执行真正的插入逻辑
                      insertIntoTray(objData);
                      fallingObjects.splice(i, 1);
                 }
@@ -567,12 +473,10 @@
         }
     }
     
-    // 真正的插入逻辑
     function insertIntoTray(objData) {
         const mesh = objData.mesh;
         const typeName = objData.typeName;
         
-        // 寻找插入点
         let insertIndex = tray.length;
         let lastSameColorIndex = -1;
         
@@ -586,35 +490,23 @@
             insertIndex = lastSameColorIndex + 1;
         }
 
-        // 插入数据
         tray.splice(insertIndex, 0, { typeName: typeName, meshGroup: mesh });
-        
-        // 瞬间修正位置（防止视觉乱跳），然后让 updateTrayPositions 平滑过渡
-        const idealPos = traySlotsMeshes[Math.min(insertIndex, TRAY_SLOTS-1)].position.clone();
-        idealPos.y += 1.5;
-        // mesh.position.copy(idealPos); // 可选：是否瞬间到位
-
         checkMatch();
     }
 
-    // 每一帧都平滑更新槽内物体位置
     function updateTrayPositions() {
         for(let i=0; i<tray.length; i++) {
-             // 目标位置
              const targetPos = traySlotsMeshes[i].position.clone();
              targetPos.y += 1.5;
              
              const mesh = tray[i].meshGroup;
-             // Lerp 平滑移动
              mesh.position.lerp(targetPos, 0.2);
              
-             // 旋转回正
              const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,0));
              mesh.quaternion.slerp(q, 0.2);
         }
     }
 
-    // --- 核心：飘字特效 ---
     function showFloatingText(text) {
         const div = document.createElement('div');
         div.className = 'float-text';
@@ -624,9 +516,6 @@
     }
 
     function checkMatch() {
-        // 检查是否有三个连续相同的
-        // 由于我们已经排序了，同色的一定在一起，所以只要遍历一遍即可
-        
         if (tray.length < 3) return;
 
         for (let i = 0; i < tray.length - 2; i++) {
@@ -635,27 +524,21 @@
             const t3 = tray[i+2].typeName;
 
             if (t1 === t2 && t2 === t3) {
-                // 消除！
-                // 计分
                 clearedSetsCount++;
-                const gain = clearedSetsCount * 10 + 20; // 基础分提高
+                const gain = clearedSetsCount * 10 + 20; 
                 score += gain;
                 document.getElementById('score').innerText = score;
                 showFloatingText("+" + gain);
                 
-                // 动画放大
                 document.getElementById('score-container').style.transform = "scale(1.3)";
                 setTimeout(() => document.getElementById('score-container').style.transform = "scale(1)", 150);
 
-                // 移除场景对象
                 scene.remove(tray[i].meshGroup);
                 scene.remove(tray[i+1].meshGroup);
                 scene.remove(tray[i+2].meshGroup);
                 
-                // 移除数据
                 tray.splice(i, 3);
                 
-                // 进度更新
                 remainingBarnacles -= 3;
                 const cleared = TOTAL_BARNACLES - remainingBarnacles;
                 const percent = Math.floor((cleared / TOTAL_BARNACLES) * 100);
@@ -664,18 +547,12 @@
 
                 if (remainingBarnacles <= 0) {
                     gameWin();
-                } else {
-                    // 消除后递归检查（防止连消bug，虽简单逻辑一般不需要）
-                    // checkMatch(); 
-                }
-                return; // 一帧只消一组
+                } 
+                return; 
             }
         }
 
-        // 如果没有消除，检查是否满了
         if (tray.length >= TRAY_SLOTS) {
-            // 给最后一点点时间（0.5秒）如果还在飞的没落地
-            // 这里简单直接判负
             isGameOver = true;
             document.getElementById('final-percent-lose').innerText = document.getElementById('percent-text').innerText;
             document.getElementById('game-over').style.display = 'block';
@@ -697,21 +574,17 @@
     function animate() {
         requestAnimationFrame(animate);
 
-        // 惯性旋转
         if (!isDragging && mainGroup && !isGameOver) {
-            // 阻尼效果
             dragVelocity.x *= 0.95;
             dragVelocity.y *= 0.95;
             
             mainGroup.rotation.y += dragVelocity.x * 0.005;
             mainGroup.rotation.x += dragVelocity.y * 0.005;
-            
-            // 呼吸动画 (Idle)
             mainGroup.position.y = Math.sin(Date.now() * 0.001) * 0.2;
         }
 
         updateFallingObjects();
-        updateTrayPositions(); // 时刻更新槽内位置
+        updateTrayPositions(); 
         renderer.render(scene, camera);
     }
 </script>
